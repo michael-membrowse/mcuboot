@@ -1,0 +1,123 @@
+name: Onboard to MemBrowse
+
+on:
+  workflow_dispatch:
+    inputs:
+      num_commits:
+        description: 'Number of commits to process'
+        required: true
+        default: '100'
+        type: string
+
+jobs:
+  load-targets:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      zephyr-matrix: ${{ steps.set-matrix.outputs.zephyr-matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Load target matrix
+        id: set-matrix
+        run: |
+          echo "matrix=$(jq -c '.' .github/membrowse-targets.json)" >> $GITHUB_OUTPUT
+          echo "zephyr-matrix=$(jq -c '.' .github/membrowse-zephyr-targets.json)" >> $GITHUB_OUTPUT
+
+  onboard:
+    needs: load-targets
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.load-targets.outputs.matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          # Onboard iterates through historical commits, so it needs full history
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # The build scripts pick the toolchain each commit uses. Onboarding
+      # checks out commits that predate them, so run them from a copy
+      # outside the checkout.
+      - name: Stage build scripts
+        run: |
+          cp -r .github/membrowse "$RUNNER_TEMP/membrowse"
+          echo "MEMBROWSE_SCRIPTS=$RUNNER_TEMP/membrowse" >> "$GITHUB_ENV"
+
+      - name: Install packages
+        run: ${{ matrix.setup_cmd }}
+
+      - name: Run MemBrowse Onboard Action
+        uses: membrowse/membrowse-action/onboard-action@v1
+        with:
+          target_name: ${{ matrix.target_name }}
+          num_commits: ${{ github.event.inputs.num_commits }}
+          build_script: ${{ matrix.build_cmd }}
+          elf: ${{ matrix.elf }}
+          ld: ${{ matrix.ld }}
+          map_file: ${{ matrix.map_file }}
+          linker_vars: ${{ matrix.linker_vars }}
+          binary_search: 'true'
+          api_key: ${{ secrets.MEMBROWSE_API_KEY }}
+          api_url: ${{ vars.MEMBROWSE_API_URL }}
+
+  # See analyze-zephyr in membrowse-report.yml for why this is set up separately.
+  onboard-zephyr:
+    needs: load-targets
+    runs-on: ubuntu-24.04
+    container:
+      image: zephyrprojectrtos/ci-base:v0.29.0
+      options: '--entrypoint /bin/bash'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.load-targets.outputs.zephyr-matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          # Onboard iterates through historical commits, so it needs full history
+          fetch-depth: 0
+          submodules: recursive
+
+      # The container runs as a different user than the one that owns the
+      # checkout, so git refuses to operate on it and MemBrowse can't read
+      # the commit metadata.
+      - name: Mark repository as safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # The build scripts pick the toolchain each commit uses. Onboarding
+      # checks out commits that predate them, so run them from a copy
+      # outside the checkout.
+      - name: Stage build scripts
+        run: |
+          cp -r .github/membrowse "$RUNNER_TEMP/membrowse"
+          echo "MEMBROWSE_SCRIPTS=$RUNNER_TEMP/membrowse" >> "$GITHUB_ENV"
+
+      - name: Run MemBrowse Onboard Action
+        uses: membrowse/membrowse-action/onboard-action@v1
+        env:
+          # Raises the GitHub API rate limit for the Zephyr SDK download
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          target_name: ${{ matrix.target_name }}
+          num_commits: ${{ github.event.inputs.num_commits }}
+          build_script: ${{ matrix.build_cmd }}
+          elf: ${{ matrix.elf }}
+          ld: ${{ matrix.ld }}
+          map_file: ${{ matrix.map_file }}
+          linker_vars: ${{ matrix.linker_vars }}
+          binary_search: 'true'
+          api_key: ${{ secrets.MEMBROWSE_API_KEY }}
+          api_url: ${{ vars.MEMBROWSE_API_URL }}

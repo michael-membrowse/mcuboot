@@ -1,0 +1,131 @@
+name: MemBrowse Memory Report
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  load-targets:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      zephyr-matrix: ${{ steps.set-matrix.outputs.zephyr-matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Load target matrix
+        id: set-matrix
+        run: |
+          echo "matrix=$(jq -c '.' .github/membrowse-targets.json)" >> $GITHUB_OUTPUT
+          echo "zephyr-matrix=$(jq -c '.' .github/membrowse-zephyr-targets.json)" >> $GITHUB_OUTPUT
+
+  analyze:
+    needs: load-targets
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.load-targets.outputs.matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # The build scripts pick the toolchain each commit uses. Onboarding
+      # checks out commits that predate them, so run them from a copy
+      # outside the checkout.
+      - name: Stage build scripts
+        run: |
+          cp -r .github/membrowse "$RUNNER_TEMP/membrowse"
+          echo "MEMBROWSE_SCRIPTS=$RUNNER_TEMP/membrowse" >> "$GITHUB_ENV"
+
+      - name: Install packages
+        run: ${{ matrix.setup_cmd }}
+
+      - name: Build
+        run: ${{ matrix.build_cmd }}
+
+      - name: Run MemBrowse analysis
+        uses: membrowse/membrowse-action@v1
+        with:
+          target_name: ${{ matrix.target_name }}
+          elf: ${{ matrix.elf }}
+          ld: ${{ matrix.ld }}
+          map_file: ${{ matrix.map_file }}
+          linker_vars: ${{ matrix.linker_vars }}
+          api_key: ${{ secrets.MEMBROWSE_API_KEY }}
+          api_url: ${{ vars.MEMBROWSE_API_URL }}
+          verbose: INFO
+          # Uncomment to allow CI to pass even when memory budgets are exceeded
+          # dont_fail_on_alerts: true
+
+  # Zephyr targets (.github/membrowse-zephyr-targets.json) run in the Zephyr
+  # CI container for its host tools. zephyr-build.sh sets up the west
+  # workspace and SDK under $HOME, outside the checkout, so onboarding's
+  # per-commit `git clean -fdx` can't wipe them.
+  analyze-zephyr:
+    needs: load-targets
+    runs-on: ubuntu-24.04
+    container:
+      image: zephyrprojectrtos/ci-base:v0.29.0
+      options: '--entrypoint /bin/bash'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.load-targets.outputs.zephyr-matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          submodules: recursive
+
+      # The container runs as a different user than the one that owns the
+      # checkout, so git refuses to operate on it and MemBrowse can't read
+      # the commit metadata.
+      - name: Mark repository as safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # The build scripts pick the toolchain each commit uses. Onboarding
+      # checks out commits that predate them, so run them from a copy
+      # outside the checkout.
+      - name: Stage build scripts
+        run: |
+          cp -r .github/membrowse "$RUNNER_TEMP/membrowse"
+          echo "MEMBROWSE_SCRIPTS=$RUNNER_TEMP/membrowse" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: ${{ matrix.build_cmd }}
+        env:
+          # Raises the GitHub API rate limit for the Zephyr SDK download
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Run MemBrowse analysis
+        uses: membrowse/membrowse-action@v1
+        with:
+          target_name: ${{ matrix.target_name }}
+          elf: ${{ matrix.elf }}
+          ld: ${{ matrix.ld }}
+          map_file: ${{ matrix.map_file }}
+          linker_vars: ${{ matrix.linker_vars }}
+          api_key: ${{ secrets.MEMBROWSE_API_KEY }}
+          api_url: ${{ vars.MEMBROWSE_API_URL }}
+          verbose: INFO
+          # Uncomment to allow CI to pass even when memory budgets are exceeded
+          # dont_fail_on_alerts: true

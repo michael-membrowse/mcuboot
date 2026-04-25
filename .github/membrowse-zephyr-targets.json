@@ -1,0 +1,34 @@
+[
+  {
+    "target_name": "zephyr-nrf52840dk",
+    "build_cmd": "\"$MEMBROWSE_SCRIPTS/zephyr-build.sh\" nrf52840dk/nrf52840 build-nrf52840dk",
+    "elf": "build-nrf52840dk/zephyr/zephyr.elf",
+    "ld": "build-nrf52840dk/zephyr/linker.cmd",
+    "map_file": "build-nrf52840dk/zephyr/zephyr.map",
+    "linker_vars": ""
+  },
+  {
+    "target_name": "zephyr-nrf52840dk-serial-recovery",
+    "build_cmd": "\"$MEMBROWSE_SCRIPTS/zephyr-build.sh\" nrf52840dk/nrf52840 build-nrf52840dk-serial-recovery -DEXTRA_CONF_FILE=serial_recovery.conf",
+    "elf": "build-nrf52840dk-serial-recovery/zephyr/zephyr.elf",
+    "ld": "build-nrf52840dk-serial-recovery/zephyr/linker.cmd",
+    "map_file": "build-nrf52840dk-serial-recovery/zephyr/zephyr.map",
+    "linker_vars": ""
+  },
+  {
+    "target_name": "zephyr-nrf52840dk-encryption",
+    "build_cmd": "\"$MEMBROWSE_SCRIPTS/zephyr-build.sh\" nrf52840dk/nrf52840 build-nrf52840dk-encryption -DCONFIG_BOOT_ENCRYPT_IMAGE=y",
+    "elf": "build-nrf52840dk-encryption/zephyr/zephyr.elf",
+    "ld": "build-nrf52840dk-encryption/zephyr/linker.cmd",
+    "map_file": "build-nrf52840dk-encryption/zephyr/zephyr.map",
+    "linker_vars": ""
+  },
+  {
+    "target_name": "zephyr-nrf52840dk-swap-move",
+    "build_cmd": "\"$MEMBROWSE_SCRIPTS/zephyr-build.sh\" nrf52840dk/nrf52840 build-nrf52840dk-swap-move -DCONFIG_BOOT_SWAP_USING_MOVE=y",
+    "elf": "build-nrf52840dk-swap-move/zephyr/zephyr.elf",
+    "ld": "build-nrf52840dk-swap-move/zephyr/linker.cmd",
+    "map_file": "build-nrf52840dk-swap-move/zephyr/zephyr.map",
+    "linker_vars": ""
+  }
+]

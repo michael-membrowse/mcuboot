@@ -1,0 +1,20 @@
+[
+  {
+    "target_name": "esp32",
+    "setup_cmd": "pip install imgtool",
+    "build_cmd": "\"$MEMBROWSE_SCRIPTS/esp-build.sh\" esp32",
+    "elf": ".build-esp32/mcuboot_esp32.elf",
+    "ld": ".build-esp32/ld/bootloader.ld",
+    "map_file": ".build-esp32/mcuboot_esp32.map",
+    "linker_vars": ""
+  },
+  {
+    "target_name": "esp32c2",
+    "setup_cmd": "pip install imgtool",
+    "build_cmd": "\"$MEMBROWSE_SCRIPTS/esp-build.sh\" esp32c2",
+    "elf": ".build-esp32c2/mcuboot_esp32c2.elf",
+    "ld": ".build-esp32c2/ld/bootloader.ld",
+    "map_file": ".build-esp32c2/mcuboot_esp32c2.map",
+    "linker_vars": ""
+  }
+]
